@@ -18,13 +18,14 @@ import java.util.stream.Collectors;
 public class APIService {
 
     @Autowired
-    PredictionEngineClient predictionEngineClient;
+    private final PredictionEngineClient predictionEngineClient;
 
     public final List<Inscription> inscriptions = new ArrayList<>();
 
     public final List<String> countries;
 
-    public APIService() {
+    public APIService(PredictionEngineClient predictionEngineClient) {
+        this.predictionEngineClient = predictionEngineClient;
         InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("countries.txt");
         try {
             String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
@@ -35,10 +36,7 @@ public class APIService {
     }
 
     public void registerUser(Inscription user) {
-        if (!this.inscriptions.stream()
-            .map(inscription -> inscription.userName)
-            .collect(Collectors.toList())
-            .contains(user.userName)
+        if (!this.inscriptions.stream().map(inscription -> inscription.userName).collect(Collectors.toList()).contains(user.userName)
         ) {
             this.inscriptions.add(user);
         }
@@ -47,46 +45,32 @@ public class APIService {
     private CountryTemperature getMeanTemperature(CountryTemperatures countryTemperature) {
         return new CountryTemperature(
             countryTemperature.country,
-            countryTemperature.temperatures.stream()
-                .mapToDouble(temp -> temp.temperature)
-                .average()
-                .orElseThrow()
+            countryTemperature.temperatures.stream().mapToDouble(temp -> temp.temperature).average().orElseThrow()
         );
     }
 
     public List<CountryTemperature> getCountriesThatSatisfyExpectations(Inscription request) throws Exception {
         CountryTemperatures temperature = this.predictionEngineClient.listCountryTemperatures(request.userCountry).execute().body();
         CountryTemperature desiredCountryMeanTemperature = this.getMeanTemperature(temperature);
-
-        return this.countries.stream()
-            .filter((String country) -> !Objects.equals(country, request.userCountry))
-            .map((String country) -> {
+        return this.countries.stream().filter((String country) -> !Objects.equals(country, request.userCountry)).map((String country) -> {
                 try {
                     CountryTemperatures temp = this.predictionEngineClient.listCountryTemperatures(country).execute().body();
                     return this.getMeanTemperature(temp);
                 } catch (IOException e) {
                     return null;
                 }
-            })
-            .filter(Objects::nonNull)
-            .filter((CountryTemperature countryTemperature) ->
-                countryTemperature.temperature < (desiredCountryMeanTemperature.temperature - request.minimumTemperatureDistance) && request.weatherExpectation.equals(WeatherExpectation.COLDER)
-                || (countryTemperature.temperature > (request.minimumTemperatureDistance + countryTemperature.temperature) && request.weatherExpectation.equals(WeatherExpectation.WARMER))
-            )
-            .collect(Collectors.toList());
+            }).filter(Objects::nonNull).filter((CountryTemperature countryTemperature) ->
+                countryTemperature.temperature < (desiredCountryMeanTemperature.temperature - request.minimumTemperatureDistance) && request.weatherExpectation.equals(WeatherExpectation.COLDER) || (countryTemperature.temperature > (request.minimumTemperatureDistance + countryTemperature.temperature) && request.weatherExpectation.equals(WeatherExpectation.WARMER))
+            ).collect(Collectors.toList());
     }
 
     public List<CountryTemperature> getTravels(String userName) {
-        return this.inscriptions.stream()
-            .filter(inscription -> inscription.userName.equals(userName))
-            .flatMap(inscription -> {
+        return this.inscriptions.stream().filter(inscription -> inscription.userName.equals(userName)).flatMap(inscription -> {
                 try {
                     return getCountriesThatSatisfyExpectations(inscription).stream();
                 } catch (Exception e) {
                     return null;
                 }
-            })
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
+            }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 }

@@ -15,7 +15,11 @@ import java.util.List;
 public class APIRestController {
 
     @Autowired
-    TemperatureService temperatureService;
+    private final TemperatureService temperatureService;
+
+    public APIRestController(TemperatureService temperatureService) {
+        this.temperatureService = temperatureService;
+    }
 
     @GetMapping("/temperature")
     public ResponseEntity<?> getCountryTemperatures(@RequestParam String country) {
